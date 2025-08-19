@@ -71,7 +71,9 @@ def create_single_admin():
             admin = db.query(User).filter(User.is_admin == True).first()
             if not admin:
                 print("DEBUG: Admin user not found. Attempting creation.") # Debug print
+                admin_username = settings.ADMIN_EMAIL.split("@")[0].lower()
                 new_admin = User(
+                    id=admin_username,  # Added missing id field
                     email=settings.ADMIN_EMAIL,
                     hashed_password=hash_password(settings.ADMIN_PASSWORD),
                     is_admin=True,
