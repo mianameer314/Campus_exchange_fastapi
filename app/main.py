@@ -27,9 +27,10 @@ log = logging.getLogger("uvicorn.error")
 app = FastAPI(
     title=settings.APP_NAME, 
     version=settings.APP_VERSION,
-    docs_url="/docs" if settings.ENV == "development" else None,
-    redoc_url="/redoc" if settings.ENV == "development" else None
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
+
 
 # root
 @app.get("/", tags=["Root"])
