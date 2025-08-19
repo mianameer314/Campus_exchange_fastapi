@@ -21,9 +21,32 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema to use email prefix as user ID."""
     
+    connection = op.get_bind()
+    
+    # Check if admin_activity_log table exists, create if not
+    result = connection.execute(sa.text("""
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_name = 'admin_activity_log'
+        );
+    """))
+    table_exists = result.scalar()
+    
+    if not table_exists:
+        op.create_table('admin_activity_log',
+            sa.Column('id', sa.Integer(), nullable=False),
+            sa.Column('admin_id', sa.Integer(), nullable=False),
+            sa.Column('action', sa.String(length=255), nullable=False),
+            sa.Column('target_type', sa.String(length=100), nullable=True),
+            sa.Column('target_id', sa.Integer(), nullable=True),
+            sa.Column('details', sa.JSON(), nullable=True),
+            sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+            sa.ForeignKeyConstraint(['admin_id'], ['users.id'], ),
+            sa.PrimaryKeyConstraint('id')
+        )
+    
     op.add_column('users', sa.Column('new_id', sa.String(length=100), nullable=True))
     
-    connection = op.get_bind()
     connection.execute(sa.text("""
         UPDATE users 
         SET new_id = SPLIT_PART(email, '@', 1)
@@ -53,56 +76,93 @@ def upgrade() -> None:
         ('admin_activity_log', 'admin_id')
     ]
     
-    # Add temporary string columns
+    # Add temporary string columns only for existing tables
     for table_name, column_name in tables_with_user_fks:
-        op.add_column(table_name, sa.Column(f'new_{column_name}', sa.String(length=100), nullable=True))
+        result = connection.execute(sa.text(f"""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = '{table_name}'
+            );
+        """))
+        if result.scalar():
+            op.add_column(table_name, sa.Column(f'new_{column_name}', sa.String(length=100), nullable=True))
     
     for table_name, column_name in tables_with_user_fks:
-        if column_name in ['reported_user_id', 'reviewed_by', 'admin_id']:  # These can be NULL
-            connection.execute(sa.text(f"""
-                UPDATE {table_name} 
-                SET new_{column_name} = (
-                    SELECT SPLIT_PART(email, '@', 1) 
-                    FROM users 
-                    WHERE users.id = {table_name}.{column_name}
-                )
-                WHERE {column_name} IS NOT NULL
-            """))
-        else:
-            connection.execute(sa.text(f"""
-                UPDATE {table_name} 
-                SET new_{column_name} = (
-                    SELECT SPLIT_PART(email, '@', 1) 
-                    FROM users 
-                    WHERE users.id = {table_name}.{column_name}
-                )
-            """))
+        result = connection.execute(sa.text(f"""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = '{table_name}'
+            );
+        """))
+        if result.scalar():
+            if column_name in ['reported_user_id', 'reviewed_by', 'admin_id']:  # These can be NULL
+                connection.execute(sa.text(f"""
+                    UPDATE {table_name} 
+                    SET new_{column_name} = (
+                        SELECT SPLIT_PART(email, '@', 1) 
+                        FROM users 
+                        WHERE users.id = {table_name}.{column_name}
+                    )
+                    WHERE {column_name} IS NOT NULL
+                """))
+            else:
+                connection.execute(sa.text(f"""
+                    UPDATE {table_name} 
+                    SET new_{column_name} = (
+                        SELECT SPLIT_PART(email, '@', 1) 
+                        FROM users 
+                        WHERE users.id = {table_name}.{column_name}
+                    )
+                """))
     
-    op.drop_constraint('blocked_users_user_id_fkey', 'blocked_users', type_='foreignkey')
-    op.drop_constraint('blocked_users_blocked_by_fkey', 'blocked_users', type_='foreignkey')
-    op.drop_constraint('listings_owner_id_fkey', 'listings', type_='foreignkey')
-    op.drop_constraint('notifications_user_id_fkey', 'notifications', type_='foreignkey')
-    op.drop_constraint('verifications_user_id_fkey', 'verifications', type_='foreignkey')
-    op.drop_constraint('chat_messages_sender_id_fkey', 'chat_messages', type_='foreignkey')
-    op.drop_constraint('chat_messages_receiver_id_fkey', 'chat_messages', type_='foreignkey')
-    op.drop_constraint('chat_rooms_participant1_id_fkey', 'chat_rooms', type_='foreignkey')
-    op.drop_constraint('chat_rooms_participant2_id_fkey', 'chat_rooms', type_='foreignkey')
-    op.drop_constraint('favorites_user_id_fkey', 'favorites', type_='foreignkey')
-    op.drop_constraint('messages_sender_id_fkey', 'messages', type_='foreignkey')
-    op.drop_constraint('messages_receiver_id_fkey', 'messages', type_='foreignkey')
-    op.drop_constraint('reports_reporter_id_fkey', 'reports', type_='foreignkey')
-    op.drop_constraint('reports_reported_user_id_fkey', 'reports', type_='foreignkey')
-    op.drop_constraint('reports_reviewed_by_fkey', 'reports', type_='foreignkey')
-    op.drop_constraint('message_reactions_user_id_fkey', 'message_reactions', type_='foreignkey')
-    op.drop_constraint('admin_activity_log_admin_id_fkey', 'admin_activity_log', type_='foreignkey')
+    constraint_drops = [
+        ('blocked_users_user_id_fkey', 'blocked_users'),
+        ('blocked_users_blocked_by_fkey', 'blocked_users'),
+        ('listings_owner_id_fkey', 'listings'),
+        ('notifications_user_id_fkey', 'notifications'),
+        ('verifications_user_id_fkey', 'verifications'),
+        ('chat_messages_sender_id_fkey', 'chat_messages'),
+        ('chat_messages_receiver_id_fkey', 'chat_messages'),
+        ('chat_rooms_participant1_id_fkey', 'chat_rooms'),
+        ('chat_rooms_participant2_id_fkey', 'chat_rooms'),
+        ('favorites_user_id_fkey', 'favorites'),
+        ('messages_sender_id_fkey', 'messages'),
+        ('messages_receiver_id_fkey', 'messages'),
+        ('reports_reporter_id_fkey', 'reports'),
+        ('reports_reported_user_id_fkey', 'reports'),
+        ('reports_reviewed_by_fkey', 'reports'),
+        ('message_reactions_user_id_fkey', 'message_reactions'),
+        ('admin_activity_log_admin_id_fkey', 'admin_activity_log')
+    ]
+    
+    for constraint_name, table_name in constraint_drops:
+        result = connection.execute(sa.text(f"""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = '{table_name}'
+            );
+        """))
+        if result.scalar():
+            try:
+                op.drop_constraint(constraint_name, table_name, type_='foreignkey')
+            except Exception:
+                # Constraint might not exist, continue
+                pass
     
     for table_name, column_name in tables_with_user_fks:
-        op.drop_column(table_name, column_name)
-        op.alter_column(table_name, f'new_{column_name}', new_column_name=column_name)
-        
-        # Make non-nullable where appropriate
-        if column_name not in ['reported_user_id', 'reviewed_by', 'admin_id']:
-            op.alter_column(table_name, column_name, nullable=False)
+        result = connection.execute(sa.text(f"""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = '{table_name}'
+            );
+        """))
+        if result.scalar():
+            op.drop_column(table_name, column_name)
+            op.alter_column(table_name, f'new_{column_name}', new_column_name=column_name)
+            
+            # Make non-nullable where appropriate
+            if column_name not in ['reported_user_id', 'reviewed_by', 'admin_id']:
+                op.alter_column(table_name, column_name, nullable=False)
     
     op.drop_constraint('users_pkey', 'users', type_='primary')
     op.drop_index('ix_users_id', table_name='users')
@@ -112,23 +172,38 @@ def upgrade() -> None:
     op.create_primary_key('users_pkey', 'users', ['id'])
     op.create_index('ix_users_id', 'users', ['id'], unique=True)
     
-    op.create_foreign_key('blocked_users_user_id_fkey', 'blocked_users', 'users', ['user_id'], ['id'], ondelete='CASCADE')
-    op.create_foreign_key('blocked_users_blocked_by_fkey', 'blocked_users', 'users', ['blocked_by'], ['id'], ondelete='CASCADE')
-    op.create_foreign_key('listings_owner_id_fkey', 'listings', 'users', ['owner_id'], ['id'])
-    op.create_foreign_key('notifications_user_id_fkey', 'notifications', 'users', ['user_id'], ['id'])
-    op.create_foreign_key('verifications_user_id_fkey', 'verifications', 'users', ['user_id'], ['id'])
-    op.create_foreign_key('chat_messages_sender_id_fkey', 'chat_messages', 'users', ['sender_id'], ['id'])
-    op.create_foreign_key('chat_messages_receiver_id_fkey', 'chat_messages', 'users', ['receiver_id'], ['id'])
-    op.create_foreign_key('chat_rooms_participant1_id_fkey', 'chat_rooms', 'users', ['participant1_id'], ['id'])
-    op.create_foreign_key('chat_rooms_participant2_id_fkey', 'chat_rooms', 'users', ['participant2_id'], ['id'])
-    op.create_foreign_key('favorites_user_id_fkey', 'favorites', 'users', ['user_id'], ['id'])
-    op.create_foreign_key('messages_sender_id_fkey', 'messages', 'users', ['sender_id'], ['id'])
-    op.create_foreign_key('messages_receiver_id_fkey', 'messages', 'users', ['receiver_id'], ['id'])
-    op.create_foreign_key('reports_reporter_id_fkey', 'reports', 'users', ['reporter_id'], ['id'])
-    op.create_foreign_key('reports_reported_user_id_fkey', 'reports', 'users', ['reported_user_id'], ['id'])
-    op.create_foreign_key('reports_reviewed_by_fkey', 'reports', 'users', ['reviewed_by'], ['id'])
-    op.create_foreign_key('message_reactions_user_id_fkey', 'message_reactions', 'users', ['user_id'], ['id'], ondelete='CASCADE')
-    op.create_foreign_key('admin_activity_log_admin_id_fkey', 'admin_activity_log', 'users', ['admin_id'], ['id'])
+    foreign_keys = [
+        ('blocked_users_user_id_fkey', 'blocked_users', 'users', ['user_id'], ['id'], 'CASCADE'),
+        ('blocked_users_blocked_by_fkey', 'blocked_users', 'users', ['blocked_by'], ['id'], 'CASCADE'),
+        ('listings_owner_id_fkey', 'listings', 'users', ['owner_id'], ['id'], None),
+        ('notifications_user_id_fkey', 'notifications', 'users', ['user_id'], ['id'], None),
+        ('verifications_user_id_fkey', 'verifications', 'users', ['user_id'], ['id'], None),
+        ('chat_messages_sender_id_fkey', 'chat_messages', 'users', ['sender_id'], ['id'], None),
+        ('chat_messages_receiver_id_fkey', 'chat_messages', 'users', ['receiver_id'], ['id'], None),
+        ('chat_rooms_participant1_id_fkey', 'chat_rooms', 'users', ['participant1_id'], ['id'], None),
+        ('chat_rooms_participant2_id_fkey', 'chat_rooms', 'users', ['participant2_id'], ['id'], None),
+        ('favorites_user_id_fkey', 'favorites', 'users', ['user_id'], ['id'], None),
+        ('messages_sender_id_fkey', 'messages', 'users', ['sender_id'], ['id'], None),
+        ('messages_receiver_id_fkey', 'messages', 'users', ['receiver_id'], ['id'], None),
+        ('reports_reporter_id_fkey', 'reports', 'users', ['reporter_id'], ['id'], None),
+        ('reports_reported_user_id_fkey', 'reports', 'users', ['reported_user_id'], ['id'], None),
+        ('reports_reviewed_by_fkey', 'reports', 'users', ['reviewed_by'], ['id'], None),
+        ('message_reactions_user_id_fkey', 'message_reactions', 'users', ['user_id'], ['id'], 'CASCADE'),
+        ('admin_activity_log_admin_id_fkey', 'admin_activity_log', 'users', ['admin_id'], ['id'], None)
+    ]
+    
+    for fk_name, source_table, target_table, source_cols, target_cols, ondelete in foreign_keys:
+        result = connection.execute(sa.text(f"""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = '{source_table}'
+            );
+        """))
+        if result.scalar():
+            if ondelete:
+                op.create_foreign_key(fk_name, source_table, target_table, source_cols, target_cols, ondelete=ondelete)
+            else:
+                op.create_foreign_key(fk_name, source_table, target_table, source_cols, target_cols)
 
 
 def downgrade() -> None:
