@@ -40,3 +40,8 @@ class SignUpIn(BaseModel):
     @field_validator("password")
     def validate_password(cls, v):
         return InputValidator.validate_password(v)
+
+class LoginIn(BaseModel):
+    email: EmailStr
+    password: str
+

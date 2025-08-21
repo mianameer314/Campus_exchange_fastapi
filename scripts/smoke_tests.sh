@@ -48,12 +48,12 @@ run_test "Detailed health" "$BASE_URL/health/detailed" "200"
 
 # API endpoint tests
 echo -e "${YELLOW}=== API Endpoint Tests ===${NC}"
-run_test "Listings endpoint" "$BASE_URL/api/v1/listings" "200"
-run_test "Search endpoint" "$BASE_URL/api/v1/search" "200"
+run_test "Listings endpoint" "$BASE_URL/api/v1/listings/search" "200"
+run_test "Search endpoint" "$BASE_URL/api/v1/listings/trending" "200"
 
 # Authentication tests
 echo -e "${YELLOW}=== Authentication Tests ===${NC}"
-run_test "Register endpoint" "$BASE_URL/api/v1/auth/register" "422" "POST"
+run_test "Register endpoint" "$BASE_URL/api/v1/auth/signup" "422" "POST"
 run_test "Login endpoint" "$BASE_URL/api/v1/auth/login" "422" "POST"
 
 # Rate limiting test

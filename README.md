@@ -1,949 +1,968 @@
-# Campus Exchange API - Complete Documentation
+# Campus Exchange API
 
-## Table of Contents
-1. [Project Overview](#project-overview)
-2. [Architecture & Tech Stack](#architecture--tech-stack)
-3. [Environment Setup](#environment-setup)
-4. [API Endpoints](#api-endpoints)
-5. [Testing Guide](#testing-guide)
-6. [Integration Guide](#integration-guide)
-7. [Code Examples](#code-examples)
+A production-grade FastAPI backend for a university-only marketplace enabling verified students to buy and sell items, chat, and manage listings with admin oversight.
 
-## Project Overview
+## Features
 
-Campus Exchange is a comprehensive marketplace API built with FastAPI for university students to buy, sell, and exchange items within their campus community. The system includes advanced features like AI-powered price suggestions, real-time chat, and intelligent search capabilities.
+- Student authentication with email OTP verification and ID upload
+- Admin verification workflow and user management
+- Create, update, search, and report listings
+- Favorites and notifications
+- Real-time style chat endpoints for buyer-seller communication
+- AI endpoints for content assistance or moderation (config-dependent)
+- Role-based access and permission dependencies
+- PostgreSQL with SQLAlchemy ORM and Alembic migrations
+- First-class DX: auto docs with Swagger, Docker, Postman collection
 
-### Key Features
-- **Authentication & Authorization**: JWT-based auth with university email validation
-- **Marketplace CRUD**: Complete listing management with image uploads
-- **Advanced Search**: PostgreSQL full-text search with filters and pagination
-- **AI Integration**: Price suggestions, duplicate detection, and recommendations
-- **Real-time Chat**: WebSocket-based messaging system
-- **Admin Panel**: Comprehensive administrative controls
-- **File Storage**: Support for both local and S3 cloud storage
-- **Email System**: Verification emails and notifications
+## Tech Stack
 
-## Architecture & Tech Stack
+- **Language** Python 3.11
+- **Framework** FastAPI
+- **Database** PostgreSQL
+- **ORM** SQLAlchemy
+- **Migrations** Alembic
+- **Auth** JWT-based
+- **Container** Docker, docker-compose
+- **Deployment** Procfile support
+- **Docs** Swagger UI, Postman collection
 
-### Backend Framework
-\`\`\`python
-# FastAPI with async support
-from fastapi import FastAPI, Depends, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+## Repository Structure (top level)
 
-app = FastAPI(
-    title="Campus Exchange API",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
-)
-\`\`\`
+```
+.env
+.vscode
+Dockerfile
+Procfile
+README.md
+alembic
+alembic.ini
+app
+docker-compose.yml
+postman_collection.json
+requirements.txt
+scripts
+test_guide
+uploads
+```
+## Getting Started
 
-### Database Layer
-\`\`\`python
-# SQLAlchemy with PostgreSQL
-from sqlalchemy import create_engine, Column, Integer, String, DateTime
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+### 1. Prerequisites
 
-# Database Models Example
-class User(Base):
-    __tablename__ = "users"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
-    is_verified = Column(Boolean, default=False)
-    university = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
-\`\`\`
+- Python 3.11
+- Docker and docker-compose (optional but recommended)
+- PostgreSQL 14+ (if running locally without Docker)
+- Make sure you can create and migrate a database
 
-### Security Implementation
-\`\`\`python
-# JWT Authentication
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+### 2. Clone and configure
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+```bash
+cp .env .env.local  # or create a fresh .env from the variables below
+```
+### 3. Environment Variables
 
-def create_access_token(data: str) -> str:
-    to_encode = {"sub": data}
-    expire = datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
-\`\`\`
+Define the following keys in your `.env`:
 
-## Environment Setup
+```
+DATABASE_URL=<set me>
+JWT_SECRET=<set me>
+JWT_ALGORITHM=<set me>
+JWT_EXPIRE_MINUTES=<set me>
+CORS_ORIGINS=<set me>
+ENV=<set me>
+ADMIN_EMAIL=<set me>
+ADMIN_PASSWORD=<set me>
+STORAGE_BACKEND=<set me>
+MAIL_USERNAME=<set me>
+MAIL_PASSWORD=<set me>
+MAIL_FROM=<set me>
+MAIL_SERVER=<set me>
+MAIL_PORT=<set me>
+MAIL_FROM_NAME=<set me>
+MAIL_STARTTLS=<set me>
+MAIL_SSL_TLS=<set me>
+ALLOWED_EMAIL_DOMAINS=<set me>
+UPLOAD_DIR=<set me>
+S3_BUCKET=<set me>
+S3_REGION=<set me>
+S3_ACCESS_KEY=<set me>
+S3_SECRET_KEY=<set me>
+S3_PUBLIC_BASE_URL=<set me>
+AI_SERVICE_URL=<set me>
+AI_API_KEY=<set me>
+AI_PRICE_SUGGEST_ENABLED=<set me>
+AI_DUPLICATE_CHECK_ENABLED=<set me>
+AI_RECOMMEND_ENABLED=<set me>
+MAX_FILE_SIZE=<set me>
+```
+### 4. Install dependencies
 
-### Required Environment Variables
-\`\`\`bash
-# Database Configuration
-DATABASE_URL=postgresql://username:password@localhost:5432/campus_exchange
-
-# JWT Configuration
-JWT_SECRET=your-super-secret-jwt-key-here
-JWT_ALGORITHM=HS256
-JWT_EXPIRE_MINUTES=60
-
-# Admin Account
-ADMIN_EMAIL=admin@cuiatk.edu.pk
-ADMIN_PASSWORD=secure-admin-password
-
-# Email Configuration (Gmail SMTP)
-MAIL_USERNAME=your-email@gmail.com
-MAIL_PASSWORD=your-app-password
-MAIL_FROM=noreply@campusexchange.com
-MAIL_SERVER=smtp.gmail.com
-MAIL_PORT=587
-
-# University Email Domains
-ALLOWED_EMAIL_DOMAINS=cuiatk.edu.pk,uni.edu,college.edu
-
-# Storage Configuration
-STORAGE_BACKEND=LOCAL  # or S3
-UPLOAD_DIR=./uploads
-
-# AWS S3 (if using S3 storage)
-S3_BUCKET=your-bucket-name
-S3_REGION=us-east-1
-S3_ACCESS_KEY=your-access-key
-S3_SECRET_KEY=your-secret-key
-
-# AI Service Configuration
-AI_API_KEY=your-openai-api-key
-AI_MODEL=gpt-4o-mini
-AI_PRICE_SUGGEST_ENABLED=true
-AI_DUPLICATE_CHECK_ENABLED=true
-AI_RECOMMEND_ENABLED=true
-
-# CORS Configuration
-CORS_ORIGINS=http://localhost:3000,https://yourfrontend.com
-\`\`\`
-
-### Installation & Setup
-\`\`\`bash
-# 1. Clone and setup virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# 2. Install dependencies
+```bash
+python -m venv .venv && source .venv/bin/activate  # on Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+```
+### 5. Database setup
 
-# 3. Setup database
+Initialize and run migrations:
+
+```bash
 alembic upgrade head
-
-# 4. Run the application
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-\`\`\`
-
-## API Endpoints
-
-### 1. Authentication Endpoints
-
-#### Sign Up
-\`\`\`http
-POST /api/v1/auth/signup
-Content-Type: application/json
-
-{
-  "email": "student@cuiatk.edu.pk",
-  "password": "securepassword123"
-}
-\`\`\`
-
-**Response:**
-\`\`\`json
-{
-  "message": "Registration successful. Please login to get your token."
-}
-\`\`\`
-
-#### Login
-\`\`\`http
-POST /api/v1/auth/login
-Content-Type: application/json
-
-{
-  "email": "student@cuiatk.edu.pk",
-  "password": "securepassword123"
-}
-\`\`\`
-
-**Response:**
-\`\`\`json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer"
-}
-\`\`\`
-
-#### Get Current User
-\`\`\`http
-GET /api/v1/auth/me
-Authorization: Bearer {access_token}
-\`\`\`
-
-**Response:**
-\`\`\`json
-{
-  "id": 1,
-  "email": "student@cuiatk.edu.pk",
-  "is_admin": false,
-  "is_verified": true,
-  "university_name": "COMSATS Attock University"
-}
-\`\`\`
-
-### 2. Listings Management
-
-#### Create Listing
-\`\`\`http
-POST /api/v1/listings
-Authorization: Bearer {access_token}
-Content-Type: multipart/form-data
-
-title: "MacBook Pro 2021 for Sale"
-description: "13-inch MacBook Pro with M1 chip, excellent condition"
-category: "Electronics"
-price: 1200.00
-images: [file1.jpg, file2.jpg]
-\`\`\`
-
-**Response:**
-\`\`\`json
-{
-  "id": 1,
-  "title": "MacBook Pro 2021 for Sale",
-  "description": "13-inch MacBook Pro with M1 chip, excellent condition",
-  "category": "Electronics",
-  "price": 1200.0,
-  "images": [
-    "/uploads/listings/uuid-filename1.jpg",
-    "/uploads/listings/uuid-filename2.jpg"
-  ],
-  "status": "ACTIVE",
-  "owner_id": 1,
-  "created_at": "2024-01-15T10:30:00Z",
-  "updated_at": "2024-01-15T10:30:00Z"
-}
-\`\`\`
-
-#### Search Listings
-\`\`\`http
-GET /api/v1/listings/search?q=laptop&category=Electronics&min_price=500&max_price=2000&page=1&page_size=10
-\`\`\`
-
-**Response:**
-\`\`\`json
-{
-  "total": 25,
-  "page": 1,
-  "page_size": 10,
-  "total_pages": 3,
-  "has_next": true,
-  "has_prev": false,
-  "results": [
-    {
-      "id": 1,
-      "title": "MacBook Pro 2021 for Sale",
-      "category": "Electronics",
-      "price": 1200.0,
-      "images": ["/uploads/listings/uuid-filename.jpg"],
-      "status": "ACTIVE",
-      "created_at": "2024-01-15T10:30:00Z"
-    }
-  ]
-}
-\`\`\`
-
-### 3. AI Services
-
-#### Price Suggestion
-\`\`\`http
-POST /api/v1/ai/price-suggest
-Authorization: Bearer {access_token}
-Content-Type: application/json
-
-{
-  "title": "MacBook Pro 2021",
-  "description": "13-inch MacBook Pro with M1 chip, 8GB RAM, 256GB SSD",
-  "category": "Electronics",
-  "condition": "Used - Good"
-}
-\`\`\`
-
-**Response:**
-\`\`\`json
-{
-  "suggested_price": 1150.0,
-  "confidence": 0.85,
-  "price_range": {
-    "min": 1000.0,
-    "max": 1300.0
-  },
-  "reasoning": "Based on current market prices for similar MacBook Pro models with M1 chip in good condition"
-}
-\`\`\`
-
-#### Duplicate Detection
-\`\`\`http
-POST /api/v1/ai/duplicate-check
-Authorization: Bearer {access_token}
-Content-Type: application/json
-
-{
-  "title": "MacBook Pro for Sale",
-  "description": "Selling my MacBook Pro laptop",
-  "category": "Electronics"
-}
-\`\`\`
-
-**Response:**
-\`\`\`json
-{
-  "is_duplicate": true,
-  "confidence": 0.92,
-  "similar_listings": [
-    {
-      "id": 5,
-      "title": "MacBook Pro 2021 for Sale",
-      "similarity_score": 0.89
-    }
-  ],
-  "recommendation": "Consider checking existing similar listings before posting"
-}
-\`\`\`
-
-### 4. Advanced Search Features
-
-#### Advanced Search with Multiple Filters
-\`\`\`http
-GET /api/v1/listings/advanced-search?keywords=laptop,computer&categories=Electronics&price_ranges=500-1000,1000-2000&universities=COMSATS&exclude_sold=true
-\`\`\`
-
-#### Search Suggestions
-\`\`\`http
-GET /api/v1/listings/suggestions?q=lap&limit=5
-\`\`\`
-
-**Response:**
-\`\`\`json
-{
-  "suggestions": [
-    "laptop",
-    "laptop bag",
-    "laptop stand",
-    "laptop charger",
-    "laptop case"
-  ]
-}
-\`\`\`
-
-## Testing Guide
-
-### Sequential Testing Workflow
-
-#### Phase 1: System Health Check
-\`\`\`bash
-# 1. Test basic connectivity
-curl http://localhost:8000/
-
-# 2. Check health endpoints
-curl http://localhost:8000/healthz
-curl http://localhost:8000/health/detailed
-\`\`\`
-
-#### Phase 2: Authentication Flow
-\`\`\`bash
-# 1. Sign up new user
-curl -X POST http://localhost:8000/api/v1/auth/signup \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@cuiatk.edu.pk","password":"testpass123"}'
-
-# 2. Login and get token
-TOKEN=$(curl -X POST http://localhost:8000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@cuiatk.edu.pk","password":"testpass123"}' \
-  | jq -r '.access_token')
-
-# 3. Verify authentication
-curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8000/api/v1/auth/me
-\`\`\`
-
-#### Phase 3: Core Functionality
-\`\`\`bash
-# 1. Create a listing
-LISTING_ID=$(curl -X POST http://localhost:8000/api/v1/listings \
-  -H "Authorization: Bearer $TOKEN" \
-  -F "title=Test Laptop" \
-  -F "description=Great laptop for sale" \
-  -F "category=Electronics" \
-  -F "price=500.00" \
-  | jq -r '.id')
-
-# 2. Search for listings
-curl "http://localhost:8000/api/v1/listings/search?q=laptop&page=1&page_size=5"
-
-# 3. Test AI services
-curl -X POST http://localhost:8000/api/v1/ai/price-suggest \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"title":"MacBook Pro","description":"Good condition","category":"Electronics","condition":"Used"}'
-\`\`\`
-
-### Postman Testing Sequence
-
-1. **Import Collection**: Import the `postman_collection.json` file
-2. **Set Variables**: Configure base_url, user_email, user_password
-3. **Run Authentication**: Execute signup → login → get current user
-4. **Test Core Features**: Create listing → search → update → delete
-5. **Test AI Services**: Price suggest → duplicate check → recommendations
-6. **Test Admin Features**: Admin login → user management → listing moderation
-
-### Automated Testing Script
-\`\`\`python
-# test_api.py
-import requests
-import json
-
-class APITester:
-    def __init__(self, base_url="http://localhost:8000"):
-        self.base_url = base_url
-        self.token = None
-    
-    def test_auth_flow(self):
-        # Sign up
-        signup_data = {
-            "email": "test@cuiatk.edu.pk",
-            "password": "testpass123"
-        }
-        response = requests.post(f"{self.base_url}/api/v1/auth/signup", json=signup_data)
-        assert response.status_code == 200
-        
-        # Login
-        response = requests.post(f"{self.base_url}/api/v1/auth/login", json=signup_data)
-        assert response.status_code == 200
-        self.token = response.json()["access_token"]
-        
-        # Get current user
-        headers = {"Authorization": f"Bearer {self.token}"}
-        response = requests.get(f"{self.base_url}/api/v1/auth/me", headers=headers)
-        assert response.status_code == 200
-        
-        print("✅ Authentication flow test passed")
-    
-    def test_listing_crud(self):
-        headers = {"Authorization": f"Bearer {self.token}"}
-        
-        # Create listing
-        listing_data = {
-            "title": "Test Item",
-            "description": "Test description",
-            "category": "Electronics",
-            "price": "100.00"
-        }
-        response = requests.post(f"{self.base_url}/api/v1/listings", 
-                               headers=headers, data=listing_data)
-        assert response.status_code == 200
-        listing_id = response.json()["id"]
-        
-        # Get listing
-        response = requests.get(f"{self.base_url}/api/v1/listings/{listing_id}")
-        assert response.status_code == 200
-        
-        print("✅ Listing CRUD test passed")
-    
-    def run_all_tests(self):
-        self.test_auth_flow()
-        self.test_listing_crud()
-        print("🎉 All tests passed!")
-
-if __name__ == "__main__":
-    tester = APITester()
-    tester.run_all_tests()
-\`\`\`
-
-## Integration Guide
-
-### Frontend Integration (React/Next.js)
-
-#### API Client Setup
-\`\`\`javascript
-// api/client.js
-class CampusExchangeAPI {
-  constructor(baseURL = 'http://localhost:8000') {
-    this.baseURL = baseURL;
-    this.token = localStorage.getItem('access_token');
-  }
-
-  setToken(token) {
-    this.token = token;
-    localStorage.setItem('access_token', token);
-  }
-
-  async request(endpoint, options = {}) {
-    const url = `${this.baseURL}${endpoint}`;
-    const config = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(this.token && { Authorization: `Bearer ${this.token}` }),
-        ...options.headers,
-      },
-      ...options,
-    };
-
-    const response = await fetch(url, config);
-    
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
-    }
-    
-    return response.json();
-  }
-
-  // Authentication methods
-  async login(email, password) {
-    const response = await this.request('/api/v1/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-    this.setToken(response.access_token);
-    return response;
-  }
-
-  async getCurrentUser() {
-    return this.request('/api/v1/auth/me');
-  }
-
-  // Listing methods
-  async searchListings(params) {
-    const queryString = new URLSearchParams(params).toString();
-    return this.request(`/api/v1/listings/search?${queryString}`);
-  }
-
-  async createListing(formData) {
-    return this.request('/api/v1/listings', {
-      method: 'POST',
-      headers: {}, // Remove Content-Type for FormData
-      body: formData,
-    });
-  }
-
-  // AI methods
-  async getPriceSuggestion(listingData) {
-    return this.request('/api/v1/ai/price-suggest', {
-      method: 'POST',
-      body: JSON.stringify(listingData),
-    });
-  }
-}
-
-export default new CampusExchangeAPI();
-\`\`\`
-
-#### React Hook Example
-\`\`\`javascript
-// hooks/useListings.js
-import { useState, useEffect } from 'react';
-import api from '../api/client';
-
-export function useListings(searchParams = {}) {
-  const [listings, setListings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    const fetchListings = async () => {
-      try {
-        setLoading(true);
-        const response = await api.searchListings(searchParams);
-        setListings(response.results);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchListings();
-  }, [JSON.stringify(searchParams)]);
-
-  return { listings, loading, error };
-}
-\`\`\`
-
-### ML Integration (Python)
-
-#### Custom ML Model Integration
-\`\`\`python
-# ml_integration.py
-import joblib
-import numpy as np
-from typing import Dict, List
-from app.services.ai_service import AIService
-
-class CustomMLService(AIService):
-    def __init__(self):
-        # Load your trained models
-        self.price_model = joblib.load('models/price_prediction_model.pkl')
-        self.duplicate_model = joblib.load('models/duplicate_detection_model.pkl')
-        self.recommendation_model = joblib.load('models/recommendation_model.pkl')
-    
-    async def suggest_price(self, title: str, description: str, 
-                          category: str, condition: str) -> Dict:
-        # Feature extraction
-        features = self.extract_features(title, description, category, condition)
-        
-        # Predict price
-        predicted_price = self.price_model.predict([features])[0]
-        confidence = self.price_model.predict_proba([features]).max()
-        
-        return {
-            "suggested_price": float(predicted_price),
-            "confidence": float(confidence),
-            "price_range": {
-                "min": float(predicted_price * 0.8),
-                "max": float(predicted_price * 1.2)
-            },
-            "reasoning": f"Based on {category} category analysis and condition assessment"
-        }
-    
-    def extract_features(self, title: str, description: str, 
-                        category: str, condition: str) -> List[float]:
-        # Implement your feature extraction logic
-        # This is a simplified example
-        features = [
-            len(title.split()),  # Title word count
-            len(description.split()),  # Description word count
-            self.category_encoder.transform([category])[0],  # Category encoding
-            self.condition_encoder.transform([condition])[0],  # Condition encoding
-        ]
-        return features
-
-# Replace the AI service in your FastAPI app
-# In main.py or wherever you initialize services
-from ml_integration import CustomMLService
-ai_service = CustomMLService()
-\`\`\`
-
-### Mobile App Integration (React Native)
-
-#### API Service for Mobile
-\`\`\`javascript
-// services/ApiService.js
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-class ApiService {
-  constructor() {
-    this.baseURL = 'https://your-api-domain.com';
-  }
-
-  async getToken() {
-    return await AsyncStorage.getItem('access_token');
-  }
-
-  async setToken(token) {
-    await AsyncStorage.setItem('access_token', token);
-  }
-
-  async authenticatedRequest(endpoint, options = {}) {
-    const token = await this.getToken();
-    
-    return fetch(`${this.baseURL}${endpoint}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
-        ...options.headers,
-      },
-    });
-  }
-
-  async uploadListing(listingData, images) {
-    const formData = new FormData();
-    
-    // Add text fields
-    Object.keys(listingData).forEach(key => {
-      formData.append(key, listingData[key]);
-    });
-    
-    // Add images
-    images.forEach((image, index) => {
-      formData.append('images', {
-        uri: image.uri,
-        type: image.type,
-        name: `image_${index}.jpg`,
-      });
-    });
-
-    const token = await this.getToken();
-    
-    return fetch(`${this.baseURL}/api/v1/listings`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
-    });
-  }
-}
-
-export default new ApiService();
-\`\`\`
-
-## Code Examples
-
-### Database Models Deep Dive
-
-#### User Model with Relationships
-\`\`\`python
-# models/user.py
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from app.db.base_class import Base
-
-class User(Base):
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
-    
-    # Profile information
-    first_name = Column(String, nullable=True)
-    last_name = Column(String, nullable=True)
-    university = Column(String, nullable=True)
-    phone_number = Column(String, nullable=True)
-    bio = Column(Text, nullable=True)
-    
-    # Status flags
-    is_active = Column(Boolean, default=True)
-    is_verified = Column(Boolean, default=False)
-    is_admin = Column(Boolean, default=False)
-    
-    # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    last_login = Column(DateTime(timezone=True), nullable=True)
-    
-    # Relationships
-    listings = relationship("Listing", back_populates="owner", cascade="all, delete-orphan")
-    favorites = relationship("Favorite", back_populates="user", cascade="all, delete-orphan")
-    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
-    sent_messages = relationship("Message", foreign_keys="Message.sender_id", back_populates="sender")
-    received_messages = relationship("Message", foreign_keys="Message.receiver_id", back_populates="receiver")
-    
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "email": self.email,
-            "first_name": self.first_name,
-            "last_name": self.last_name,
-            "university": self.university,
-            "is_verified": self.is_verified,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-        }
-\`\`\`
-
-#### Advanced Listing Model with Search
-\`\`\`python
-# models/listing.py
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, Enum, ARRAY
-from sqlalchemy.dialects.postgresql import TSVECTOR
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from app.db.base_class import Base
-import enum
-
-class ListingStatus(str, enum.Enum):
-    ACTIVE = "ACTIVE"
-    SOLD = "SOLD"
-    ARCHIVED = "ARCHIVED"
-    PENDING = "PENDING"
-
-class Listing(Base):
-    __tablename__ = "listings"
-
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False, index=True)
-    description = Column(Text, nullable=True)
-    category = Column(String, nullable=False, index=True)
-    price = Column(Float, nullable=False, index=True)
-    
-    # Media and metadata
-    images = Column(ARRAY(String), default=[])
-    tags = Column(ARRAY(String), default=[])
-    condition = Column(String, nullable=True)  # New, Used, Refurbished
-    
-    # Status and ownership
-    status = Column(Enum(ListingStatus), default=ListingStatus.ACTIVE, index=True)
-    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    
-    # Location and contact
-    location = Column(String, nullable=True)
-    contact_method = Column(String, default="chat")  # chat, email, phone
-    
-    # Analytics
-    view_count = Column(Integer, default=0)
-    favorite_count = Column(Integer, default=0)
-    
-    # Search optimization
-    search_vector = Column(TSVECTOR)
-    
-    # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    expires_at = Column(DateTime(timezone=True), nullable=True)
-    
-    # Relationships
-    owner = relationship("User", back_populates="listings")
-    favorites = relationship("Favorite", back_populates="listing", cascade="all, delete-orphan")
-    reports = relationship("Report", back_populates="listing", cascade="all, delete-orphan")
-    
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "title": self.title,
-            "description": self.description,
-            "category": self.category,
-            "price": self.price,
-            "images": self.images,
-            "status": self.status.value,
-            "owner_id": self.owner_id,
-            "view_count": self.view_count,
-            "favorite_count": self.favorite_count,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-        }
-\`\`\`
-
-### Advanced API Patterns
-
-#### Dependency Injection for Database and Auth
-\`\`\`python
-# api/deps.py
-from typing import Generator, Optional
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
-from sqlalchemy.orm import Session
-
-from app.core.config import settings
-from app.db.session import SessionLocal
-from app.models.user import User
-
-security = HTTPBearer()
-
-def get_db() -> Generator:
-    """Database dependency"""
-    try:
-        db = SessionLocal()
-        yield db
-    finally:
-        db.close()
-
-def get_current_user(
-    db: Session = Depends(get_db),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> User:
-    """Get current authenticated user"""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    
-    try:
-        payload = jwt.decode(
-            credentials.credentials, 
-            settings.JWT_SECRET, 
-            algorithms=[settings.JWT_ALGORITHM]
-        )
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if user is None:
-        raise credentials_exception
-    
-    return user
-
-def get_current_verified_user(
-    current_user: User = Depends(get_current_user)
-) -> User:
-    """Require verified user"""
-    if not current_user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User must be verified"
-        )
-    return current_user
-
-def get_current_admin_user(
-    current_user: User = Depends(get_current_user)
-) -> User:
-    """Require admin user"""
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
-        )
-    return current_user
-\`\`\`
-
-#### Advanced Error Handling
-\`\`\`python
-# core/exceptions.py
-from fastapi import HTTPException, Request
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
-from starlette.exceptions import HTTPException as StarletteHTTPException
-import logging
-
-logger = logging.getLogger(__name__)
-
-class CampusExchangeException(Exception):
-    """Base exception for Campus Exchange"""
-    def __init__(self, message: str, status_code: int = 500):
-        self.message = message
-        self.status_code = status_code
-        super().__init__(self.message)
-
-class UserNotVerifiedException(CampusExchangeException):
-    def __init__(self):
-        super().__init__("User must be verified to perform this action", 403)
-
-class ListingNotFoundException(CampusExchangeException):
-    def __init__(self, listing_id: int):
-        super().__init__(f"Listing with id {listing_id} not found", 404)
-
-class UnauthorizedListingAccessException(CampusExchangeException):
-    def __init__(self):
-        super().__init__("You don't have permission to access this listing", 403)
-
-async def campus_exchange_exception_handler(request: Request, exc: CampusExchangeException):
-    logger.error(f"Campus Exchange Exception: {exc.message}")
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.message, "type": "campus_exchange_error"}
-    )
-
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    logger.error(f"Validation error: {exc.errors()}")
-    return JSONResponse(
-        status_code=422,
-        content={
-            "detail": "Validation error",
-            "errors": exc.errors(),
-            "type": "validation_error"
-        }
-    )
-\`\`\`
-
-This comprehensive documentation provides everything needed to understand, test, and integrate with your Campus Exchange API. The system is production-ready with robust error handling, security measures, and scalable architecture patterns.
+```
+### 6. Run the app (local)
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+Open docs at http://localhost:8000/docs
+
+### 7. Run with Docker
+
+```bash
+docker-compose up --build
+```
+## API Documentation
+
+Interactive docs at `/docs` and Redoc at `/redoc`. A Postman collection is included: `postman_collection.json`.
+
+Below is a section-by-section breakdown of the API routers detected in `app/api/v1`.
+
+### `admin.py`
+- **DELETE /listings/{listing_id}**  
+  function `delete_listing`  
+  status default  
+  response_model —  
+  summary —
+- **PATCH /listings/{listing_id}/moderate**  
+  function `moderate_listing`  
+  status default  
+  response_model —  
+  summary —
+- **PATCH /reports/{report_id}/resolve**  
+  function `resolve_report`  
+  status default  
+  response_model —  
+  summary —
+- **GET /stats**  
+  function `get_admin_stats`  
+  status default  
+  response_model AdminStatsOut  
+  summary —
+- **GET /system/health**  
+  function `get_system_health`  
+  status default  
+  response_model SystemHealthOut  
+  summary —
+- **POST /system/maintenance**  
+  function `toggle_maintenance_mode`  
+  status default  
+  response_model —  
+  summary —
+- **DELETE /users/{user_id}**  
+  function `delete_user`  
+  status default  
+  response_model —  
+  summary —
+- **PATCH /users/{user_id}**  
+  function `update_user`  
+  status default  
+  response_model —  
+  summary —
+- **PATCH /verifications/{verification_id}/review**  
+  function `review_verification`  
+  status default  
+  response_model —  
+  summary —
+
+### `ai.py`
+- **POST /duplicate-check**  
+  function `check_duplicate`  
+  status default  
+  response_model DuplicateCheckResponse  
+  summary —
+- **GET /health**  
+  function `ai_health_check`  
+  status default  
+  response_model —  
+  summary —
+- **POST /price-suggest**  
+  function `suggest_price`  
+  status default  
+  response_model PriceSuggestResponse  
+  summary —
+- **POST /recommend**  
+  function `recommend_listings`  
+  status default  
+  response_model RecommendResponse  
+  summary —
+
+### `auth.py`
+- **POST /login**  
+  function `login`  
+  status default  
+  response_model Token  
+  summary —
+- **GET /me**  
+  function `me`  
+  status default  
+  response_model —  
+  summary —
+- **POST /signup**  
+  function `signup`  
+  status default  
+  response_model SignupResponse  
+  summary —
+
+### `chat.py`
+- **DELETE /block/{user_id}**  
+  function `unblock_user`  
+  status default  
+  response_model —  
+  summary —
+- **POST /block/{user_id}**  
+  function `block_user`  
+  status default  
+  response_model —  
+  summary —
+- **GET /blocked**  
+  function `get_blocked_users`  
+  status default  
+  response_model —  
+  summary —
+- **POST /messages/{message_id}/reactions**  
+  function `add_reaction`  
+  status default  
+  response_model —  
+  summary —
+- **GET /rooms**  
+  function `get_user_chat_rooms`  
+  status default  
+  response_model List[ChatRoomOut]  
+  summary —
+- **GET /rooms/{room_id}/messages**  
+  function `get_chat_messages`  
+  status default  
+  response_model —  
+  summary —
+- **POST /rooms/{room_id}/messages/file**  
+  function `upload_file_message`  
+  status default  
+  response_model —  
+  summary —
+
+### `favorites.py`
+- **GET /**  
+  function `list_favorites`  
+  status default  
+  response_model List[FavoriteResponse]  
+  summary —
+- **DELETE /{listing_id}**  
+  function `remove_favorite`  
+  status default  
+  response_model —  
+  summary —
+- **POST /{listing_id}**  
+  function `add_favorite`  
+  status default  
+  response_model —  
+  summary —
+
+### `listings.py`
+- **POST **  
+  function `create_listing`  
+  status default  
+  response_model ListingOut  
+  summary —
+- **DELETE /{listing_id}**  
+  function `delete_listing`  
+  status 204  
+  response_model —  
+  summary —
+- **GET /{listing_id}**  
+  function `get_listing`  
+  status default  
+  response_model ListingOut  
+  summary —
+- **PATCH /{listing_id}**  
+  function `update_listing`  
+  status default  
+  response_model ListingOut  
+  summary —
+- **PATCH /{listing_id}/status**  
+  function `patch_status`  
+  status default  
+  response_model ListingOut  
+  summary —
+
+### `notifications.py`
+- **GET **  
+  function `list_notifications`  
+  status default  
+  response_model List[NotificationResponse]  
+  summary —
+- **POST /mark-all-read**  
+  function `mark_all_read`  
+  status default  
+  response_model —  
+  summary —
+- **GET /unread-count**  
+  function `get_unread_count`  
+  status default  
+  response_model —  
+  summary —
+- **PATCH /{notification_id}**  
+  function `update_notification`  
+  status default  
+  response_model NotificationResponse  
+  summary —
+
+### `reports.py`
+- **POST /**  
+  function `create_report`  
+  status default  
+  response_model ReportOut  
+  summary —
+
+### `search.py`
+- **GET /listings/advanced-search**  
+  function `advanced_search_listings`  
+  status default  
+  response_model —  
+  summary —
+- **GET /listings/search**  
+  function `search_listings`  
+  status default  
+  response_model —  
+  summary —
+- **GET /listings/suggestions**  
+  function `get_search_suggestions`  
+  status default  
+  response_model —  
+  summary —
+- **GET /listings/trending**  
+  function `get_trending_searches`  
+  status default  
+  response_model —  
+  summary —
+
+### `verification.py`
+- **POST /approve/{user_id}**  
+  function `approve`  
+  status default  
+  response_model —  
+  summary —
+- **GET /pending**  
+  function `pending`  
+  status default  
+  response_model —  
+  summary —
+- **POST /reject/{user_id}**  
+  function `reject`  
+  status default  
+  response_model —  
+  summary —
+- **POST /request**  
+  function `request_verification`  
+  status default  
+  response_model —  
+  summary —
+- **GET /status**  
+  function `status`  
+  status default  
+  response_model —  
+  summary —
+- **POST /upload-id**  
+  function `upload_id`  
+  status default  
+  response_model —  
+  summary —
+- **POST /verify-otp**  
+  function `verify_otp`  
+  status default  
+  response_model —  
+  summary —
+
+## Data Models (Schemas)
+
+Parsed from `app/schemas`.
+
+### `admin.py`
+- **AdminUserOut**
+  - id: str
+  - email: str
+  - is_admin: bool
+  - is_verified: bool
+  - is_active: bool
+  - university: Optional[str]
+  - created_at: Optional[datetime]
+- **AdminListingOut**
+  - id: int
+  - title: str
+  - description: str
+  - category: str
+  - price: float
+  - status: str
+  - owner_id: str
+  - created_at: datetime
+  - updated_at: datetime
+  - owner: Optional[AdminUserOut]
+- **AdminReportOut**
+  - id: int
+  - report_type: str
+  - reason: str
+  - status: str
+  - created_at: datetime
+  - resolved_at: Optional[datetime]
+  - reporter_id: str
+  - reported_user_id: Optional[str]
+  - listing_id: Optional[int]
+  - admin_notes: Optional[str]
+- **AdminVerificationOut**
+  - id: int
+  - user_id: str
+  - status: str
+  - created_at: datetime
+  - reviewed_at: Optional[datetime]
+  - admin_notes: Optional[str]
+- **PaginatedUsersResponse**
+  - users: List[AdminUserOut]
+  - total: int
+  - page: int
+  - page_size: int
+  - total_pages: int
+- **PaginatedListingsResponse**
+  - listings: List[AdminListingOut]
+  - total: int
+  - page: int
+  - page_size: int
+  - total_pages: int
+- **PaginatedReportsResponse**
+  - reports: List[AdminReportOut]
+  - total: int
+  - page: int
+  - page_size: int
+  - total_pages: int
+- **PaginatedVerificationsResponse**
+  - verifications: List[AdminVerificationOut]
+  - total: int
+  - page: int
+  - page_size: int
+  - total_pages: int
+- **AdminStatsOut**
+  - total_users: int
+  - verified_users: int
+  - new_users: int
+  - total_listings: int
+  - active_listings: int
+  - sold_listings: int
+  - new_listings: int
+  - total_messages: int
+  - active_chats: int
+  - recent_messages: int
+  - pending_reports: int
+  - pending_verifications: int
+  - blocked_users_count: int
+  - category_stats: List[Dict[str, Any]]
+  - period_days: int
+- **UserUpdateRequest**
+  - is_verified: Optional[bool]
+  - is_active: Optional[bool]
+  - is_admin: Optional[bool]
+  - university: Optional[str]
+- **ListingModerationRequest**
+  - status: str
+  - admin_notes: Optional[str]
+- **SystemHealthOut**
+  - database_status: str
+  - total_users: int
+  - total_listings: int
+  - total_messages: int
+  - recent_activity: Dict[str, int]
+  - timestamp: datetime
+
+### `ai.py`
+- **PriceSuggestRequest**
+  - title: str
+  - description: str
+  - category: str
+  - condition: str
+- **PriceSuggestResponse**
+  - suggested_price: Optional[float]
+  - confidence: int
+  - reasoning: str
+  - price_range: Optional[Dict[str, float]]
+- **DuplicateCheckRequest**
+  - title: str
+  - description: str
+  - category: str
+- **DuplicateCheckResponse**
+  - is_duplicate: bool
+  - confidence: int
+  - similar_listings: List[int]
+  - reasoning: str
+- **RecommendRequest**
+  - user_preferences: Dict[str, Any]
+- **RecommendResponse**
+  - recommendations: List[Dict[str, Any]]
+  - reasoning: str
+
+### `auth.py`
+- **UserCreate**
+  - email: EmailStr
+  - password: str
+- **Token**
+  - access_token: str
+  - token_type: str
+- **UserOut**
+  - id: str
+  - email: EmailStr
+  - is_admin: bool
+  - is_verified: bool
+- **SignUpIn**
+  - email: EmailStr
+  - password: str
+
+### `chat.py`
+- **ChatMessageBase**
+  - content: str
+- **ChatRoomOut**
+  - id: int
+  - listing_id: int
+  - participant1_id: str
+  - participant2_id: str
+  - created_at: datetime
+  - last_message_at: Optional[datetime]
+- **MessageReactionOut**
+  - id: int
+  - message_id: int
+  - user_id: str
+  - reaction: str
+  - created_at: datetime
+- **ChatMessageEdit**
+  - message_id: int
+  - new_content: str
+- **ChatMessageDelete**
+  - message_id: int
+
+### `common.py`
+- **Message**
+  - message: str
+
+### `favorite.py`
+- **FavoriteBase**
+  - listing_id: int
+
+### `listing.py`
+- **ListingCreate**
+  - title: str
+  - description: str
+  - category: str
+  - price: Decimal
+  - images: Optional[List[str]]
+- **ListingUpdate**
+  - title: Optional[str]
+  - description: Optional[str]
+  - category: Optional[str]
+  - price: Optional[Decimal]
+  - images: Optional[List[str]]
+- **ListingStatusPatch**
+  - status: str
+- **ListingOut**
+  - id: int
+  - title: str
+  - description: str
+  - category: str
+  - price: Decimal
+  - images: Optional[List[str]]
+  - status: str
+  - owner_id: str
+
+### `notification.py`
+- **NotificationBase**
+  - title: str
+  - message: str
+  - type: str
+  - related_id: Optional[int]
+- **NotificationUpdate**
+  - is_read: bool
+
+### `report.py`
+- **ReportCreate**
+  - reported_listing_id: Optional[int]
+  - reported_user_id: Optional[str]
+  - reason: str
+- **ReportOut**
+  - id: int
+  - reporter_id: str
+  - reported_listing_id: Optional[int]
+  - reported_user_id: Optional[str]
+  - reason: str
+  - status: str
+  - created_at: datetime
+  - reviewed_by: Optional[str]
+  - reviewed_at: Optional[datetime]
+  - audit_log: Optional[str]
+
+### `search.py`
+- **SearchFilters**
+  - q: Optional[str]
+  - category: Optional[str]
+  - min_price: Optional[float]
+  - max_price: Optional[float]
+  - university: Optional[str]
+  - status: Optional[str]
+  - sort_by: str
+  - sort_order: str
+- **AdvancedSearchFilters**
+  - keywords: Optional[List[str]]
+  - categories: Optional[List[str]]
+  - price_ranges: Optional[List[str]]
+  - universities: Optional[List[str]]
+  - date_from: Optional[str]
+  - date_to: Optional[str]
+  - exclude_sold: bool
+- **SearchResponse**
+  - total: int
+  - page: int
+  - page_size: int
+  - total_pages: int
+  - has_next: bool
+  - has_prev: bool
+  - results: List[dict]
+- **SearchSuggestion**
+  - suggestions: List[str]
+- **TrendingCategory**
+  - category: str
+  - count: int
+- **TrendingResponse**
+  - trending_categories: List[TrendingCategory]
+
+### `verification.py`
+- **VerificationRequest**
+  - university_email: EmailStr
+  - student_id: str
+- **OTPVerify**
+  - otp_code: str
+- **AdminReviewAction**
+  - admin_notes: str
+
+## Migrations
+
+Use Alembic. Common commands:
+
+```bash
+alembic revision -m "describe change"
+alembic upgrade head
+alembic downgrade -1
+```
+## Testing
+
+- Use the Postman collection to validate endpoints
+- Add pytest as needed, structure under `tests/`
+
+## Deployment
+
+- Dockerfile and docker-compose are provided
+- Procfile included for PaaS that use it (e.g., Render/Heroku-like processes)
+- Set env vars in your deployment environment
+- Run migrations before first boot: `alembic upgrade head`
+
+## Security Notes
+
+- Keep `SECRET_KEY` out of VCS
+- Rotate tokens and credentials periodically
+- Validate file uploads and sanitize user inputs
+- Enforce admin-only actions via dependency checks
+
+## Contributing
+
+1. Create a feature branch
+2. Add or update tests
+3. Open a PR with a clear description
+
+## License
+
+Add your license of choice (MIT recommended).
+
+
+---
+
+## Detailed Endpoints
+
+### `admin.py`
+**Router prefix**: `/admin`
+- **GET /admin/stats**
+  - Function: `get_admin_stats`
+  - Response model: `AdminStatsOut`
+  - Response fields (from `AdminStatsOut`):
+    - total_users: int
+    - verified_users: int
+    - new_users: int
+    - total_listings: int
+    - active_listings: int
+    - sold_listings: int
+    - new_listings: int
+    - total_messages: int
+    - active_chats: int
+    - recent_messages: int
+    - pending_reports: int
+    - pending_verifications: int
+    - blocked_users_count: int
+    - category_stats: List[Dict[str, Any]]
+    - period_days: int
+  - Parameters: `days: int = Query(30, ge=1, le=365, description="Number of days for stats"),     db: Session = Depends(get_db),     admin: User = Depends(get_current_admin)`
+- **PATCH /admin/users/{user_id}**
+  - Function: `update_user`
+  - Parameters: `user_id: str,  # Changed user_id from int to str     update_data: UserUpdateRequest,     db: Session = Depends(get_db),     admin: User = Depends(get_current_admin)`
+- **DELETE /admin/users/{user_id}**
+  - Function: `delete_user`
+  - Parameters: `user_id: str,  # Changed user_id from int to str     db: Session = Depends(get_db),     admin: User = Depends(get_current_admin)`
+- **PATCH /admin/listings/{listing_id}/moderate**
+  - Function: `moderate_listing`
+  - Parameters: `listing_id: int,     moderation_data: ListingModerationRequest,     db: Session = Depends(get_db),     admin: User = Depends(get_current_admin)`
+- **DELETE /admin/listings/{listing_id}**
+  - Function: `delete_listing`
+  - Parameters: `listing_id: int,     reason: Optional[str] = Query(None, description="Reason for deletion"),     db: Session = Depends(get_db),     admin: User = Depends(get_current_admin)`
+- **PATCH /admin/reports/{report_id}/resolve**
+  - Function: `resolve_report`
+  - Parameters: `report_id: int,     resolution: str = Query(..., description="Resolution action taken"),     notes: Optional[str] = Query(None, description="Admin notes"),     db: Session = Depends(get_db),     admin: User = Depends(get...`
+- **PATCH /admin/verifications/{verification_id}/review**
+  - Function: `review_verification`
+  - Parameters: `verification_id: int,     approved: bool = Query(..., description="Whether to approve or reject"),     notes: Optional[str] = Query(None, description="Admin notes"),     db: Session = Depends(get_db),     admin: User = D...`
+- **GET /admin/system/health**
+  - Function: `get_system_health`
+  - Response model: `SystemHealthOut`
+  - Response fields (from `SystemHealthOut`):
+    - database_status: str
+    - total_users: int
+    - total_listings: int
+    - total_messages: int
+    - recent_activity: Dict[str, int]
+    - timestamp: datetime
+  - Parameters: `db: Session = Depends(get_db),     admin: User = Depends(get_current_admin)`
+- **POST /admin/system/maintenance**
+  - Function: `toggle_maintenance_mode`
+  - Parameters: `enabled: bool = Query(..., description="Enable or disable maintenance mode"),     message: Optional[str] = Query(None, description="Maintenance message"),     db: Session = Depends(get_db),     admin: User = Depends(get_...`
+
+### `ai.py`
+**Router prefix**: `/ai`
+- **POST /ai/price-suggest**
+  - Function: `suggest_price`
+  - Response model: `PriceSuggestResponse`
+  - Response fields (from `PriceSuggestResponse`):
+    - suggested_price: Optional[float]
+    - confidence: int
+    - reasoning: str
+    - price_range: Optional[Dict[str, float]]
+  - Parameters: `request: PriceSuggestRequest,     db: Session = Depends(get_db),     user=Depends(get_current_user)`
+- **POST /ai/duplicate-check**
+  - Function: `check_duplicate`
+  - Response model: `DuplicateCheckResponse`
+  - Response fields (from `DuplicateCheckResponse`):
+    - is_duplicate: bool
+    - confidence: int
+    - similar_listings: List[int]
+    - reasoning: str
+  - Parameters: `request: DuplicateCheckRequest,     db: Session = Depends(get_db),     user=Depends(get_current_user)`
+- **POST /ai/recommend**
+  - Function: `recommend_listings`
+  - Response model: `RecommendResponse`
+  - Response fields (from `RecommendResponse`):
+    - recommendations: List[Dict[str, Any]]
+    - reasoning: str
+  - Parameters: `request: RecommendRequest,     db: Session = Depends(get_db),     user=Depends(get_current_user)`
+- **GET /ai/health**
+  - Function: `ai_health_check`
+
+### `auth.py`
+**Router prefix**: `/auth`
+- **POST /auth/signup**
+  - Function: `signup`
+  - Response model: `SignupResponse`
+  - Parameters: `payload: SignUpIn, db: Session = Depends(get_db)`
+- **POST /auth/login**
+  - Function: `login`
+  - Response model: `Token`
+  - Response fields (from `Token`):
+    - access_token: str
+    - token_type: str
+  - Parameters: `payload: SignUpIn, db: Session = Depends(get_db)`
+- **GET /auth/me**
+  - Function: `me`
+  - Parameters: `user: User = Depends(get_current_user)`
+
+### `chat.py`
+**Router prefix**: `/chat`
+- **GET /chat/rooms**
+  - Function: `get_user_chat_rooms`
+  - Response model: `List[ChatRoomOut]`
+  - Response fields (from `ChatRoomOut`):
+    - id: int
+    - listing_id: int
+    - participant1_id: str
+    - participant2_id: str
+    - created_at: datetime
+    - last_message_at: Optional[datetime]
+  - Parameters: `db: Session = Depends(get_db),     current_user: User = Depends(get_current_user)`
+- **GET /chat/rooms/{room_id}/messages**
+  - Function: `get_chat_messages`
+  - Parameters: `room_id: int,     page: int = 1,     page_size: int = 50,     db: Session = Depends(get_db),     current_user: User = Depends(get_current_user)`
+- **POST /chat/rooms/{room_id}/messages/file**
+  - Function: `upload_file_message`
+  - Parameters: `room_id: int,     file: UploadFile = File(...),     caption: Optional[str] = Form(None),     db: Session = Depends(get_db),     current_user: User = Depends(get_current_user)`
+- **POST /chat/messages/{message_id}/reactions**
+  - Function: `add_reaction`
+  - Parameters: `message_id: int,     reaction: str,     db: Session = Depends(get_db),     current_user: User = Depends(get_current_user)`
+- **POST /chat/block/{user_id}**
+  - Function: `block_user`
+  - Parameters: `user_id: str,     reason: Optional[str] = None,     db: Session = Depends(get_db),     current_user: User = Depends(get_current_user)`
+- **DELETE /chat/block/{user_id}**
+  - Function: `unblock_user`
+  - Parameters: `user_id: str,     db: Session = Depends(get_db),     current_user: User = Depends(get_current_user)`
+- **GET /chat/blocked**
+  - Function: `get_blocked_users`
+  - Parameters: `db: Session = Depends(get_db),     current_user: User = Depends(get_current_user)`
+
+### `favorites.py`
+**Router prefix**: `/favorites`
+- **POST /favorites/{listing_id}**
+  - Function: `add_favorite`
+  - Parameters: `listing_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)`
+- **DELETE /favorites/{listing_id}**
+  - Function: `remove_favorite`
+  - Parameters: `listing_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)`
+- **GET /favorites/**
+  - Function: `list_favorites`
+  - Response model: `List[FavoriteResponse]`
+  - Parameters: `db: Session = Depends(get_db), user=Depends(get_current_user)`
+
+### `listings.py`
+**Router prefix**: `/listings`
+- **POST /listings**
+  - Function: `create_listing`
+  - Response model: `ListingOut`
+  - Response fields (from `ListingOut`):
+    - id: int
+    - title: str
+    - description: str
+    - category: str
+    - price: Decimal
+    - images: Optional[List[str]]
+    - status: str
+    - owner_id: str
+  - Parameters: `title: str = Form(...),     description: str = Form(...),     category: str = Form(...),     price: Decimal = Form(...),     images: Optional[List[UploadFile]] = File(None),     db: Session = Depends(deps.get_db),     us...`
+- **GET /listings/{listing_id}**
+  - Function: `get_listing`
+  - Response model: `ListingOut`
+  - Response fields (from `ListingOut`):
+    - id: int
+    - title: str
+    - description: str
+    - category: str
+    - price: Decimal
+    - images: Optional[List[str]]
+    - status: str
+    - owner_id: str
+  - Parameters: `listing_id: int, db: Session = Depends(deps.get_db)`
+- **PATCH /listings/{listing_id}**
+  - Function: `update_listing`
+  - Response model: `ListingOut`
+  - Response fields (from `ListingOut`):
+    - id: int
+    - title: str
+    - description: str
+    - category: str
+    - price: Decimal
+    - images: Optional[List[str]]
+    - status: str
+    - owner_id: str
+  - Parameters: `listing_id: int,     payload: ListingUpdate,     db: Session = Depends(deps.get_db),     user: User = Depends(deps.get_current_user),`
+- **PATCH /listings/{listing_id}/status**
+  - Function: `patch_status`
+  - Response model: `ListingOut`
+  - Response fields (from `ListingOut`):
+    - id: int
+    - title: str
+    - description: str
+    - category: str
+    - price: Decimal
+    - images: Optional[List[str]]
+    - status: str
+    - owner_id: str
+  - Parameters: `listing_id: int,     payload: ListingStatusPatch,     db: Session = Depends(deps.get_db),     user: User = Depends(deps.get_current_user),`
+- **DELETE /listings/{listing_id}**
+  - Status: 204
+  - Function: `delete_listing`
+  - Parameters: `listing_id: int,     db: Session = Depends(deps.get_db),     user: User = Depends(deps.get_current_user),`
+
+### `notifications.py`
+**Router prefix**: `/notifications`
+- **GET /notifications**
+  - Function: `list_notifications`
+  - Response model: `List[NotificationResponse]`
+  - Parameters: `skip: int = 0,      limit: int = 50,      unread_only: bool = False,     db: Session = Depends(get_db),      user=Depends(get_current_user)`
+- **PATCH /notifications/{notification_id}**
+  - Function: `update_notification`
+  - Response model: `NotificationResponse`
+  - Parameters: `notification_id: int,     update_data: NotificationUpdate,     db: Session = Depends(get_db),     user=Depends(get_current_user)`
+- **POST /notifications/mark-all-read**
+  - Function: `mark_all_read`
+  - Parameters: `db: Session = Depends(get_db), user=Depends(get_current_user)`
+- **GET /notifications/unread-count**
+  - Function: `get_unread_count`
+  - Parameters: `db: Session = Depends(get_db), user=Depends(get_current_user)`
+
+### `reports.py`
+**Router prefix**: `/reports`
+- **POST /reports/**
+  - Function: `create_report`
+  - Response model: `ReportOut`
+  - Response fields (from `ReportOut`):
+    - id: int
+    - reporter_id: str
+    - reported_listing_id: Optional[int]
+    - reported_user_id: Optional[str]
+    - reason: str
+    - status: str
+    - created_at: datetime
+    - reviewed_by: Optional[str]
+    - reviewed_at: Optional[datetime]
+    - audit_log: Optional[str]
+  - Parameters: `payload: ReportCreate,     db: Session = Depends(get_db),     current_user=Depends(get_current_user)`
+
+### `search.py`
+**Router prefix**: `/`
+- **GET /listings/search**
+  - Function: `search_listings`
+  - Parameters: `q: Optional[str] = Query(None, description="Search keyword"),     category: Optional[str] = Query(None, description="Filter by category"),     min_price: Optional[float] = Query(None, ge=0, description="Minimum price"), ...`
+- **GET /listings/advanced-search**
+  - Function: `advanced_search_listings`
+  - Parameters: `keywords: Optional[List[str]] = Query(None, description="Multiple search keywords"),     categories: Optional[List[str]] = Query(None, description="Multiple categories"),     price_ranges: Optional[List[str]] = Query(Non...`
+- **GET /listings/suggestions**
+  - Function: `get_search_suggestions`
+  - Parameters: `q: str = Query(..., min_length=2, description="Search query for suggestions"),     limit: int = Query(10, ge=1, le=20, description="Number of suggestions"),     db: Session = Depends(get_db)`
+- **GET /listings/trending**
+  - Function: `get_trending_searches`
+  - Parameters: `days: int = Query(7, ge=1, le=30, description="Number of days to look back"),     limit: int = Query(10, ge=1, le=20),     db: Session = Depends(get_db)`
+
+### `verification.py`
+**Router prefix**: `/verification`
+- **POST /verification/request**
+  - Function: `request_verification`
+  - Parameters: `payload: VerificationRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)`
+- **POST /verification/verify-otp**
+  - Function: `verify_otp`
+  - Parameters: `payload: OTPVerify, db: Session = Depends(get_db), user: User = Depends(get_current_user)`
+- **POST /verification/upload-id**
+  - Function: `upload_id`
+  - Parameters: `file: UploadFile = File(...), db: Session = Depends(get_db), user: User = Depends(get_current_user)`
+- **GET /verification/status**
+  - Function: `status`
+  - Parameters: `db: Session = Depends(get_db), user: User = Depends(get_current_user)`
+- **GET /verification/pending**
+  - Function: `pending`
+  - Parameters: `db: Session = Depends(get_db), admin: User = Depends(get_current_admin)`
+- **POST /verification/approve/{user_id}**
+  - Function: `approve`
+  - Parameters: `user_id: str, review_action: AdminReviewAction, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)`
+- **POST /verification/reject/{user_id}**
+  - Function: `reject`
+  - Parameters: `user_id: str, review_action: AdminReviewAction, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)`
