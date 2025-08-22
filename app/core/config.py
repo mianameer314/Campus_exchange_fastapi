@@ -1,7 +1,7 @@
 import os
 from typing import List, Literal, Optional
-from pydantic import AnyHttpUrl, field_validator
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 60
 
     # CORS
-    CORS_ORIGINS: List[AnyHttpUrl] | List[str] = []
+    CORS_ORIGINS: List[str] = []
 
     # Admin
     ADMIN_EMAIL: str
@@ -48,9 +48,9 @@ class Settings(BaseSettings):
     S3_PUBLIC_BASE_URL: Optional[str] = None  # e.g. https://bucket.s3.ap-south-1.amazonaws.com
 
     # AI Service Configuration
-    AI_SERVICE_URL: str = os.getenv("AI_SERVICE_URL", "https://mlservice-production.up.railway.app")  # Awais's ML FastAPI service
+    AI_SERVICE_URL: str = os.getenv("AI_SERVICE_URL", "https://mlservice-production.up.railway.app")
     AI_API_KEY: str
-    AI_MODEL: str = "get-4o-mini"  # Optional: Awais can specify model version like "v1.0" or "latest"
+    AI_MODEL: str = "gpt-4o-mini"  # corrected name
     AI_TIMEOUT_SECONDS: int = 30
     AI_MAX_RETRIES: int = 3
     AI_RETRY_DELAY: float = 2.0
@@ -63,9 +63,13 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors(cls, v):
+        if not v:
+            return []
         if isinstance(v, str):
             return [s.strip() for s in v.split(",") if s.strip()]
-        return v
+        if isinstance(v, list):
+            return v
+        return []
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
@@ -82,7 +86,7 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-def allowed_domains() -> list[str]:
+def allowed_domains() -> List[str]:
     return [
         d.strip().lower()
         for d in settings.ALLOWED_EMAIL_DOMAINS.split(",")

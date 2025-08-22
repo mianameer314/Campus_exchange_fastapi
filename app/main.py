@@ -31,7 +31,6 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-
 # root
 @app.get("/", tags=["Root"])
 def read_root():
@@ -47,9 +46,12 @@ if settings.ENV == "production":
         allowed_hosts=["*.vercel.app", "*.railway.app", "localhost"]
     )
 
+# ✅ Fixed CORS (split comma-separated origins into a list)
+origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",")] if settings.CORS_ORIGINS else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS or ["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -65,16 +67,14 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.on_event("startup")
 def create_single_admin():
-    print("DEBUG: Entering create_single_admin startup event.") # Debug print
+    print("DEBUG: Entering create_single_admin startup event.") 
     try:
         with SessionLocal() as db:
-            print("DEBUG: SessionLocal created.") # Debug print
+            print("DEBUG: SessionLocal created.") 
             admin = db.query(User).filter(User.is_admin == True).first()
             if not admin:
-                print("DEBUG: Admin user not found. Attempting creation.") # Debug print
-                admin_username = settings.ADMIN_EMAIL.split("@")[0].lower()
+                print("DEBUG: Admin user not found. Attempting creation.") 
                 new_admin = User(
-                    id=admin_username,  # Added missing id field
                     email=settings.ADMIN_EMAIL,
                     hashed_password=hash_password(settings.ADMIN_PASSWORD),
                     is_admin=True,
@@ -82,19 +82,18 @@ def create_single_admin():
                 )
                 db.add(new_admin)
                 db.commit()
-                db.refresh(new_admin) # Refresh to get ID if needed, or if other properties are populated by DB
+                db.refresh(new_admin) 
                 log.info("Admin user created: %s", settings.ADMIN_EMAIL)
-                print(f"DEBUG: Admin user created: {settings.ADMIN_EMAIL}") # Debug print
+                print(f"DEBUG: Admin user created: {settings.ADMIN_EMAIL}") 
             else:
                 log.info("Admin already exists, skipping creation")
-                print("DEBUG: Admin already exists, skipping creation.") # Debug print
-        print("DEBUG: Exiting create_single_admin successfully.") # Debug print
+                print("DEBUG: Admin already exists, skipping creation.") 
+        print("DEBUG: Exiting create_single_admin successfully.") 
     except Exception as e:
-        log.error("Admin bootstrap failed: %s", e, exc_info=True) # exc_info=True logs full traceback
-        print(f"ERROR: Admin bootstrap failed: {e}") # Debug print
+        log.error("Admin bootstrap failed: %s", e, exc_info=True) 
+        print(f"ERROR: Admin bootstrap failed: {e}") 
         import traceback
-        traceback.print_exc(file=sys.stderr) # IMP: Force full traceback to stderr
-        # Re-raising ensures the container truly exits with an error for Railway to potentially catch better
+        traceback.print_exc(file=sys.stderr) 
         raise e 
 
 app.include_router(admin.router, prefix="/api/v1")
@@ -116,7 +115,6 @@ def health():
 async def detailed_health():
     """Detailed health check for monitoring"""
     try:
-        # Test database connection
         with SessionLocal() as db:
             db.execute(text("SELECT 1"))
         
