@@ -23,7 +23,7 @@ def add_favorite(listing_id: int, db: Session = Depends(get_db), user=Depends(ge
     
     NotificationService.notify_new_favorite(db, listing, user.id)
     
-    return {"status": "ok"}
+    return {"status": "Added To Your favourites List, You can Now check it out"}
 
 @router.delete("/{listing_id}")
 def remove_favorite(listing_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
