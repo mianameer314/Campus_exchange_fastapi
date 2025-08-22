@@ -46,8 +46,8 @@ if settings.ENV == "production":
         allowed_hosts=["*.vercel.app", "*.railway.app", "localhost"]
     )
 
-# ✅ Fixed CORS (split comma-separated origins into a list)
-origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",")] if settings.CORS_ORIGINS else ["*"]
+# ✅ FIX: settings.CORS_ORIGINS is already a list, no need to split
+origins = settings.CORS_ORIGINS or ["*"]
 
 app.add_middleware(
     CORSMiddleware,
