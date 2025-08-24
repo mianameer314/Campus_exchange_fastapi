@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, WebSocketException, status, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session, joinedload
 from starlette.websockets import WebSocketState
 from jose import JWTError, jwt
@@ -53,27 +53,52 @@ def user_blocked(db: Session, user_id: str, blocked_by: str):
         BlockedUser.blocked_by == blocked_by
     ).first() is not None
 
-async def get_current_user_websocket(websocket: WebSocket, db: Session):
-    auth = websocket.headers.get("authorization")
-    if not auth or not auth.lower().startswith("bearer "):
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        raise Exception("Missing or invalid authorization header")
-    token = auth[7:]
+async def get_current_user_websocket(websocket: WebSocket, db: Session) -> User:
+    """
+    Accepts auth via:
+      1) Authorization: Bearer <token>   (e.g., non-browser clients)
+      2) ?token=<jwt>                     (browser-friendly)
+      3) Sec-WebSocket-Protocol: <jwt>    (alternative browser-friendly)
+    """
+    # 1) Header
+    auth = websocket.headers.get("authorization") or websocket.headers.get("Authorization")
+    token = None
+    if auth and auth.lower().startswith("bearer "):
+        token = auth.split(" ", 1)[1].strip()
+
+    # 2) Query param
+    if not token:
+        token = websocket.query_params.get("token")
+
+    # 3) Sec-WebSocket-Protocol
+    if not token:
+        # Starlette exposes selected subprotocol(s) in headers during handshake
+        # Many clients pass a single JWT as the subprotocol.
+        proto = websocket.headers.get("sec-websocket-protocol")
+        if proto and "." in proto:   # very rough heuristic to avoid common values like "json"
+            token = proto.strip()
+
+    if not token:
+        await websocket.close(code=4401)
+        raise WebSocketException(code=4401, reason="Unauthorized")
+
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            raise Exception("Invalid token: no subject")
-        # Optionally verify user in DB
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            raise Exception("User not found")
-        return user_id
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALG])
     except JWTError:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        raise Exception("Token decode error")
+        await websocket.close(code=4401)
+        raise WebSocketException(code=4401, reason="Invalid token")
+
+    user_id = payload.get("sub")
+    if not user_id:
+        await websocket.close(code=4401)
+        raise WebSocketException(code=4401, reason="Invalid token payload")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        await websocket.close(code=4401)
+        raise WebSocketException(code=4401, reason="User not found")
+
+    return user
 
 @router.get("/rooms", response_model=List[ChatRoomOut])
 def get_user_chat_rooms(
