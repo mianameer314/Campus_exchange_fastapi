@@ -16,7 +16,13 @@ class User(Base):
 
     listings: Mapped[List["Listing"]] = relationship("Listing", back_populates="owner")
     favorites: Mapped[List["Favorite"]] = relationship("Favorite", back_populates="user")
-    notifications: Mapped[List["Notification"]] = relationship("Notification", back_populates="user")
+    notifications: Mapped[List["Notification"]] = relationship(
+    "Notification",
+    back_populates="user",
+    cascade="all, delete-orphan",   # ORM cascade
+    passive_deletes=True            # tell SQLAlchemy to respect DB ondelete
+)
+
 
     # ✅ Add this:
     verifications = relationship("Verification", back_populates="user")

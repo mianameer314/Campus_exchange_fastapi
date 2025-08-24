@@ -73,6 +73,12 @@ async def create_listing(
     
     return obj
 
+@router.get("",response_model=List[ListingOut])
+def get_listings(db: Session = Depends(deps.get_db)):
+    listings = db.query(Listing).all()
+    return listings
+   
+
 
 # -------- Get listing --------
 @router.get("/{listing_id}", response_model=ListingOut)
