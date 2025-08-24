@@ -8,7 +8,12 @@ class Verification(Base):
     __tablename__ = "verifications"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[str] = mapped_column(String(100), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(
+    String(100),
+    ForeignKey("users.id", ondelete="CASCADE"),
+    nullable=False,
+    index=True
+)
     university_email: Mapped[str] = mapped_column(String(255), nullable=False)
     student_id: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|verified|rejected
